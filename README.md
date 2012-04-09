@@ -9,7 +9,8 @@ Take it apart, use what you want. Please just give credit where credit is due.
 
 REQUIREMENTS
 
-Visual Studio 2010
+* Visual Studio 2010
+* Amazon AWS SDK for .NET (http://aws.amazon.com/sdkfornet/) 
 
 INSTALLATION
 
