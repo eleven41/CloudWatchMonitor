@@ -3,14 +3,12 @@ CloudWatch Monitor for Windows to collect Windows disk and memory statistics and
 
 Copyright (C) 2012, Eleven41 Software
 
-## LICENSE
+## License
 [MIT License](https://github.com/eleven41/CloudWatchMonitor/blob/master/LICENSE.md)
 
-## REQUIREMENTS
+## Documentation
+See the [documentation](https://github.com/eleven41/CloudWatchMonitor/wiki)
 
-* Visual Studio 2010
-* Amazon AWS SDK for .NET (http://aws.amazon.com/sdkfornet/) 
+## Home
 
-## INSTALLATION
-
-Please refer to http://www.eleven41.com/Labs/cloudwatch-monitor for complete installation instructions.
+http://www.eleven41.com/Labs/cloudwatch-monitor
