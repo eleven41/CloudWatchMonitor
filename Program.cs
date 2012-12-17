@@ -46,7 +46,19 @@ namespace CloudWatchMonitor
 
 							Console.WriteLine("Error uninstalling service: {0}", e.Message);
 						}
-						return;
+                        return;
+
+                    case "-a":
+                        try
+                        {
+                            Console.WriteLine("Creating AWS alarms...");
+                            service.CreateAlarms();
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("Error creating alarms: {0}", e.Message);
+                        }
+                        return;
 				}
 
 				service.Run();

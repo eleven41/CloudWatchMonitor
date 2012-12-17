@@ -29,13 +29,25 @@ namespace CloudWatchMonitor
 		string _amazonAccessKeyId;
 		string _amazonSecretAccessKey;
 
+        // Amazon Simple Notification Service Topics for alarms.
+        // Will be read from .config file
+        List<string> _amazonSNSTopics;
+
 		// Instance ID of the current running instance.
 		// Will be populated by communicating with metadata server.
 		string _instanceId;
 
+        // 'Name' tag value of the current running instance.
+        // Will be populated by communicating with EC2 API.
+        string _instanceName;
+
 		// Region of the current running instance.
 		// Will be populated by communicating with the metadata server.
 		string _region;
+
+        // Polling frequency.
+        // Will be read from .config file.
+        int _monitorPeriodInMinutes;
 
 		public MonitorService()
 		{
@@ -169,101 +181,7 @@ namespace CloudWatchMonitor
 		{
 			Info("CloudWatch Monitor starting");
 			
-			// Default monitor period is 1 minute
-			int monitorPeriodInMinutes = 1;
-
-			try
-			{
-				Info("Reading configuration");
-
-				monitorPeriodInMinutes = ReadInt("MonitorPeriodInMinutes", 1);
-
-				// Validate min/max values
-				if (monitorPeriodInMinutes < 1)
-					throw new Exception("MonitorPeriodInMinutes must be greater than or equal to 1");
-				Info("MonitorPeriodInMinutes: {0}", monitorPeriodInMinutes);
-
-				_isSubmitDiskSpaceAvailable = ReadBoolean("SubmitDiskSpaceAvailable", true);
-				Info("SubmitDiskSpaceAvailable: {0}", _isSubmitDiskSpaceAvailable);
-
-				_isSubmitDiskSpaceUsed = ReadBoolean("SubmitDiskSpaceUsed", true);
-				Info("SubmitDiskSpaceUsed: {0}", _isSubmitDiskSpaceUsed);
-
-				_isSubmitDiskSpaceUtilization = ReadBoolean("SubmitDiskSpaceUtilization", true);
-				Info("SubmitDiskSpaceUtilization: {0}", _isSubmitDiskSpaceUtilization);
-
-				_isSubmitMemoryAvailable = ReadBoolean("SubmitMemoryAvailable", true);
-				Info("SubmitMemoryAvailable: {0}", _isSubmitMemoryAvailable);
-
-				_isSubmitMemoryUsed = ReadBoolean("SubmitMemoryUsed", true);
-				Info("SubmitMemoryUsed: {0}", _isSubmitMemoryUsed);
-
-				_isSubmitMemoryUtilization = ReadBoolean("SubmitMemoryUtilization", true);
-				Info("SubmitMemoryUtilization: {0}", _isSubmitMemoryUtilization);
-
-				_isSubmitPhysicalMemoryAvailable = ReadBoolean("SubmitPhysicalMemoryAvailable", true);
-				Info("SubmitPhysicalMemoryAvailable: {0}", _isSubmitPhysicalMemoryAvailable);
-
-				_isSubmitPhysicalMemoryUsed = ReadBoolean("SubmitPhysicalMemoryUsed", true);
-				Info("SubmitPhysicalMemoryUsed: {0}", _isSubmitPhysicalMemoryUsed);
-
-				_isSubmitPhysicalMemoryUtilization = ReadBoolean("SubmitPhysicalMemoryUtilization", true);
-				Info("SubmitPhysicalMemoryUtilization: {0}", _isSubmitPhysicalMemoryUtilization);
-
-				_isSubmitVirtualMemoryAvailable = ReadBoolean("SubmitVirtualMemoryAvailable", true);
-				Info("SubmitVirtualMemoryAvailable: {0}", _isSubmitVirtualMemoryAvailable);
-
-				_isSubmitVirtualMemoryUsed = ReadBoolean("SubmitVirtualMemoryUsed", true);
-				Info("SubmitVirtualMemoryUsed: {0}", _isSubmitVirtualMemoryUsed);
-
-				_isSubmitVirtualMemoryUtilization = ReadBoolean("SubmitVirtualMemoryUtilization", true);
-				Info("SubmitVirtualMemoryUtilization: {0}", _isSubmitVirtualMemoryUtilization);
-
-				_includeDrives = ReadStringList("IncludeDrives", null);
-				if (_includeDrives != null)
-					Info("IncludeDrives: {0}", String.Join(",", _includeDrives));
-				else
-					Info("IncludeDrives: All drives");
-
-				_instanceId = ReadString("InstanceId", null);
-				if (!String.IsNullOrEmpty(_instanceId))
-					Info("Instance ID: {0}", _instanceId);
-
-				_region = ReadString("Region", null);
-				if (!String.IsNullOrEmpty(_region))
-					Info("Region: {0}", _region);
-			}
-			catch (Exception e)
-			{
-				Error(e.Message);
-				if (!Environment.UserInteractive)
-					this.Stop(); // Tell the service to stop
-				return;
-			}
-
-			if (!_isSubmitDiskSpaceAvailable &&
-				!_isSubmitDiskSpaceUsed &&
-				!_isSubmitDiskSpaceUtilization &&
-				!_isSubmitMemoryAvailable &&
-				!_isSubmitMemoryUsed &&
-				!_isSubmitMemoryUtilization &&
-				!_isSubmitPhysicalMemoryAvailable &&
-				!_isSubmitPhysicalMemoryUsed &&
-				!_isSubmitPhysicalMemoryUtilization &&
-				!_isSubmitVirtualMemoryAvailable &&
-				!_isSubmitVirtualMemoryUsed &&
-				!_isSubmitVirtualMemoryUtilization)
-			{
-				Error("No data is selected to submit.");
-				if (!Environment.UserInteractive)
-					this.Stop(); // Tell the service to stop
-				return;
-			}
-
-			// Read the Amazon access key information from the config file.
-			// Amazon will validate this later.
-			_amazonAccessKeyId = ConfigurationManager.AppSettings["Amazon.AccessKeyId"];
-			_amazonSecretAccessKey = ConfigurationManager.AppSettings["Amazon.SecretAccessKey"];
+            ReadConfiguration();
 
 			while (true)
 			{
@@ -283,7 +201,7 @@ namespace CloudWatchMonitor
 				DateTime updateEnd = DateTime.Now;
 				TimeSpan updateDiff = (updateEnd - updateBegin);
 
-				TimeSpan baseTimeSpan = TimeSpan.FromMinutes(monitorPeriodInMinutes);
+				TimeSpan baseTimeSpan = TimeSpan.FromMinutes(_monitorPeriodInMinutes);
 
 				TimeSpan timeToWait = (baseTimeSpan - updateDiff);
 				if (timeToWait.TotalMilliseconds < 50)
@@ -299,6 +217,273 @@ namespace CloudWatchMonitor
 
 			Info("CloudWatch Monitor shutting down");
 		}
+
+        private void ReadConfiguration()
+        {
+            try
+            {
+                Info("Reading configuration");
+
+                _monitorPeriodInMinutes = ReadInt("MonitorPeriodInMinutes", 1);
+
+                // Validate min/max values
+                if (_monitorPeriodInMinutes < 1)
+                    throw new Exception("MonitorPeriodInMinutes must be greater than or equal to 1");
+                Info("MonitorPeriodInMinutes: {0}", _monitorPeriodInMinutes);
+
+                _isSubmitDiskSpaceAvailable = ReadBoolean("SubmitDiskSpaceAvailable", true);
+                Info("SubmitDiskSpaceAvailable: {0}", _isSubmitDiskSpaceAvailable);
+
+                _isSubmitDiskSpaceUsed = ReadBoolean("SubmitDiskSpaceUsed", true);
+                Info("SubmitDiskSpaceUsed: {0}", _isSubmitDiskSpaceUsed);
+
+                _isSubmitDiskSpaceUtilization = ReadBoolean("SubmitDiskSpaceUtilization", true);
+                Info("SubmitDiskSpaceUtilization: {0}", _isSubmitDiskSpaceUtilization);
+
+                _isSubmitMemoryAvailable = ReadBoolean("SubmitMemoryAvailable", true);
+                Info("SubmitMemoryAvailable: {0}", _isSubmitMemoryAvailable);
+
+                _isSubmitMemoryUsed = ReadBoolean("SubmitMemoryUsed", true);
+                Info("SubmitMemoryUsed: {0}", _isSubmitMemoryUsed);
+
+                _isSubmitMemoryUtilization = ReadBoolean("SubmitMemoryUtilization", true);
+                Info("SubmitMemoryUtilization: {0}", _isSubmitMemoryUtilization);
+
+                _isSubmitPhysicalMemoryAvailable = ReadBoolean("SubmitPhysicalMemoryAvailable", true);
+                Info("SubmitPhysicalMemoryAvailable: {0}", _isSubmitPhysicalMemoryAvailable);
+
+                _isSubmitPhysicalMemoryUsed = ReadBoolean("SubmitPhysicalMemoryUsed", true);
+                Info("SubmitPhysicalMemoryUsed: {0}", _isSubmitPhysicalMemoryUsed);
+
+                _isSubmitPhysicalMemoryUtilization = ReadBoolean("SubmitPhysicalMemoryUtilization", true);
+                Info("SubmitPhysicalMemoryUtilization: {0}", _isSubmitPhysicalMemoryUtilization);
+
+                _isSubmitVirtualMemoryAvailable = ReadBoolean("SubmitVirtualMemoryAvailable", true);
+                Info("SubmitVirtualMemoryAvailable: {0}", _isSubmitVirtualMemoryAvailable);
+
+                _isSubmitVirtualMemoryUsed = ReadBoolean("SubmitVirtualMemoryUsed", true);
+                Info("SubmitVirtualMemoryUsed: {0}", _isSubmitVirtualMemoryUsed);
+
+                _isSubmitVirtualMemoryUtilization = ReadBoolean("SubmitVirtualMemoryUtilization", true);
+                Info("SubmitVirtualMemoryUtilization: {0}", _isSubmitVirtualMemoryUtilization);
+
+                _includeDrives = ReadStringList("IncludeDrives", null);
+                if (_includeDrives != null)
+                    Info("IncludeDrives: {0}", String.Join(",", _includeDrives));
+                else
+                    Info("IncludeDrives: All drives");
+
+                _instanceId = ReadString("InstanceId", null);
+                if (!String.IsNullOrEmpty(_instanceId))
+                    Info("Instance ID: {0}", _instanceId);
+
+                _region = ReadString("Region", null);
+                if (!String.IsNullOrEmpty(_region))
+                    Info("Region: {0}", _region);
+            }
+            catch (Exception e)
+            {
+                Error(e.Message);
+                if (!Environment.UserInteractive)
+                    this.Stop(); // Tell the service to stop
+                return;
+            }
+
+            if (!_isSubmitDiskSpaceAvailable &&
+                !_isSubmitDiskSpaceUsed &&
+                !_isSubmitDiskSpaceUtilization &&
+                !_isSubmitMemoryAvailable &&
+                !_isSubmitMemoryUsed &&
+                !_isSubmitMemoryUtilization &&
+                !_isSubmitPhysicalMemoryAvailable &&
+                !_isSubmitPhysicalMemoryUsed &&
+                !_isSubmitPhysicalMemoryUtilization &&
+                !_isSubmitVirtualMemoryAvailable &&
+                !_isSubmitVirtualMemoryUsed &&
+                !_isSubmitVirtualMemoryUtilization)
+            {
+                Error("No data is selected to submit.");
+                if (!Environment.UserInteractive)
+                    this.Stop(); // Tell the service to stop
+                return;
+            }
+
+            // Read the Amazon access key information from the config file.
+            // Amazon will validate this later.
+            _amazonAccessKeyId = ConfigurationManager.AppSettings["AWSAccessKey"];
+            _amazonSecretAccessKey = ConfigurationManager.AppSettings["AWSSecretKey"];
+
+            // Read the Amazon SNS topics from the config file.
+            // Amazon will validate this later.
+            char[] separatorCharacters = new char[] { ',' };
+            _amazonSNSTopics = ConfigurationManager.AppSettings["AlarmSNSTopics"].Split(separatorCharacters, StringSplitOptions.RemoveEmptyEntries).ToList();
+        }
+
+        public void CreateAlarms()
+        {
+            ReadConfiguration();
+
+            if (!PopulateInstanceId())
+                return;
+
+            if (!PopulateInstanceName())
+                return;
+
+            if (_isSubmitDiskSpaceUtilization)
+            {
+                // Get the list of drives from the system
+                var drives = System.IO.DriveInfo.GetDrives();
+                foreach (var drive in drives)
+                {
+                    string driveName = String.Format("{0}", drive.Name[0]);
+
+                    // If we need to filter drives, then only include those
+                    // explicitly specified.
+                    if (_includeDrives != null)
+                    {
+                        if (!_includeDrives.Contains(driveName))
+                        {
+                            Info("Not including drive: {0}", driveName);
+                            continue;
+                        }
+                    }
+
+                    CreateDriveUtilizationAlarm(driveName);
+                }
+            }
+
+            if (_isSubmitPhysicalMemoryUtilization)
+            {
+                CreatePhysicalMemoryUtlizationAlarm();
+            }
+
+            CreateCPUUtilizationAlarm();
+
+            CreateStatusCheckAlarm();
+        }
+
+        private void CreateDriveUtilizationAlarm(string driveName)
+        {
+            List<Amazon.CloudWatch.Model.Dimension> dimensions = new List<Amazon.CloudWatch.Model.Dimension>()
+                {
+                    new Amazon.CloudWatch.Model.Dimension()
+                    .WithName("InstanceId")
+                    .WithValue(_instanceId),
+                    new Amazon.CloudWatch.Model.Dimension()
+                    .WithName("Drive")
+                    .WithValue(driveName)
+                };
+
+            var putMetricAlarmReq = new Amazon.CloudWatch.Model.PutMetricAlarmRequest()
+            .WithActionsEnabled(true)
+            .WithAlarmActions(_amazonSNSTopics)
+            .WithAlarmDescription("Disk space utilization alarm")
+            .WithAlarmName(_instanceName + "-disk-space")
+            .WithComparisonOperator("GreaterThanOrEqualToThreshold")
+            .WithDimensions(dimensions)
+            .WithEvaluationPeriods(1)
+            .WithMetricName("DiskSpaceUtilization")
+            .WithNamespace("System/Windows")
+            .WithPeriod(60 * 5)
+            .WithStatistic("Average")
+            .WithThreshold(85)
+            .WithUnit("Percent");
+
+            var regionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_region);
+            var cloudwatchClient = Amazon.AWSClientFactory.CreateAmazonCloudWatchClient(regionEndpoint);
+
+            var putMetricAlarmResp = cloudwatchClient.PutMetricAlarm(putMetricAlarmReq);
+        }
+
+        private void CreatePhysicalMemoryUtlizationAlarm()
+        {
+            List<Amazon.CloudWatch.Model.Dimension> dimensions = new List<Amazon.CloudWatch.Model.Dimension>()
+                {
+                    new Amazon.CloudWatch.Model.Dimension()
+                    .WithName("InstanceId")
+                    .WithValue(_instanceId)
+                };
+
+            var putMetricAlarmReq = new Amazon.CloudWatch.Model.PutMetricAlarmRequest()
+            .WithActionsEnabled(true)
+            .WithAlarmActions(_amazonSNSTopics)
+            .WithAlarmDescription("Physical memory utilization alarm")
+            .WithAlarmName(_instanceName + "-physical-memory")
+            .WithComparisonOperator("GreaterThanOrEqualToThreshold")
+            .WithDimensions(dimensions)
+            .WithEvaluationPeriods(1)
+            .WithMetricName("PhysicalMemoryUtilization")
+            .WithNamespace("System/Windows")
+            .WithPeriod(60 * 5)
+            .WithStatistic("Average")
+            .WithThreshold(85)
+            .WithUnit("Percent");
+
+            var regionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_region);
+            var cloudwatchClient = Amazon.AWSClientFactory.CreateAmazonCloudWatchClient(regionEndpoint);
+
+            var putMetricAlarmResp = cloudwatchClient.PutMetricAlarm(putMetricAlarmReq);
+        }
+
+        private void CreateCPUUtilizationAlarm()
+        {
+            List<Amazon.CloudWatch.Model.Dimension> dimensions = new List<Amazon.CloudWatch.Model.Dimension>()
+                {
+                    new Amazon.CloudWatch.Model.Dimension()
+                    .WithName("InstanceId")
+                    .WithValue(_instanceId)
+                };
+
+            var putMetricAlarmReq = new Amazon.CloudWatch.Model.PutMetricAlarmRequest()
+            .WithActionsEnabled(true)
+            .WithAlarmActions(_amazonSNSTopics)
+            .WithAlarmDescription("CPU utilization alarm")
+            .WithAlarmName(_instanceName + "-CPU-utilization")
+            .WithComparisonOperator("GreaterThanOrEqualToThreshold")
+            .WithDimensions(dimensions)
+            .WithEvaluationPeriods(1)
+            .WithMetricName("CPUUtilization")
+            .WithNamespace("AWS/EC2")
+            .WithPeriod(60 * 5)
+            .WithStatistic("Average")
+            .WithThreshold(85)
+            .WithUnit("Percent");
+
+            var regionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_region);
+            var cloudwatchClient = Amazon.AWSClientFactory.CreateAmazonCloudWatchClient(regionEndpoint);
+
+            var putMetricAlarmResp = cloudwatchClient.PutMetricAlarm(putMetricAlarmReq);
+        }
+
+        private void CreateStatusCheckAlarm()
+        {
+            List<Amazon.CloudWatch.Model.Dimension> dimensions = new List<Amazon.CloudWatch.Model.Dimension>()
+                {
+                    new Amazon.CloudWatch.Model.Dimension()
+                    .WithName("InstanceId")
+                    .WithValue(_instanceId)
+                };
+
+            var putMetricAlarmReq = new Amazon.CloudWatch.Model.PutMetricAlarmRequest()
+            .WithActionsEnabled(true)
+            .WithAlarmActions(_amazonSNSTopics)
+            .WithAlarmDescription("Status check alarm")
+            .WithAlarmName(_instanceName + "-status-check")
+            .WithComparisonOperator("GreaterThanOrEqualToThreshold")
+            .WithDimensions(dimensions)
+            .WithEvaluationPeriods(1)
+            .WithMetricName("StatusCheckFailed")
+            .WithNamespace("AWS/EC2")
+            .WithPeriod(60 * 5)
+            .WithStatistic("Average")
+            .WithThreshold(1)
+            .WithUnit("Count");
+
+            var regionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_region);
+            var cloudwatchClient = Amazon.AWSClientFactory.CreateAmazonCloudWatchClient(regionEndpoint);
+
+            var putMetricAlarmResp = cloudwatchClient.PutMetricAlarm(putMetricAlarmReq);
+        }
 
 		private void UpdateMetrics()
 		{
@@ -626,5 +811,36 @@ namespace CloudWatchMonitor
 
 			return true;
 		}
+
+        private bool PopulateInstanceName()
+        {
+            if (!String.IsNullOrEmpty(_instanceName))
+                return true;
+
+            if (String.IsNullOrEmpty(_region))
+            {
+                PopulateRegion();
+            }
+
+            var request = new Amazon.EC2.Model.DescribeInstancesRequest()
+            .WithInstanceId(_instanceId);
+
+            var regionEndpoint = Amazon.RegionEndpoint.GetBySystemName(_region);
+            var client = new Amazon.EC2.AmazonEC2Client(regionEndpoint);
+            var response = client.DescribeInstances(request);
+
+            foreach (var tag in response.DescribeInstancesResult.Reservation[0].RunningInstance[0].Tag)
+            {
+                if (tag.IsSetKey() && tag.IsSetValue())
+                {
+                    if (tag.Key == "Name")
+                    {
+                        _instanceName = tag.Value;
+                    }
+                }
+            }
+            return true;
+        }
+
 	}
 }
