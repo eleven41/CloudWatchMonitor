@@ -378,7 +378,7 @@ namespace CloudWatchMonitor
             .WithActionsEnabled(true)
             .WithAlarmActions(_amazonSNSTopics)
             .WithAlarmDescription("Disk space utilization alarm")
-            .WithAlarmName(_instanceName + "-disk-space")
+            .WithAlarmName(_instanceName + "-disk-space-" + driveName)
             .WithComparisonOperator("GreaterThanOrEqualToThreshold")
             .WithDimensions(dimensions)
             .WithEvaluationPeriods(1)
