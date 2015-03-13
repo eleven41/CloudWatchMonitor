@@ -1,64 +1,70 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.ServiceProcess;
-using System.Text;
 using System.Configuration.Install;
 using System.Reflection;
+using System.ServiceProcess;
 
 namespace CloudWatchMonitor
 {
-	static class Program
-	{
-		/// <summary>
-		/// The main entry point for the application.
-		/// </summary>
-		static void Main(string[] args)
-		{
-			var service = new MonitorService();
+    internal static class Program
+    {
+        /// <summary>
+        ///     The main entry point for the application.
+        /// </summary>
+        private static void Main(string[] args)
+        {
+            var service = new MonitorService();
 
-			if (Environment.UserInteractive)
-			{
-				string parameter = string.Concat(args);
-				switch (parameter)
-				{
-					case "-i":
-						try
-						{
-							Console.WriteLine("Installing service...");
-							ManagedInstallerClass.InstallHelper(new string[] { Assembly.GetExecutingAssembly().Location });
-						}
-						catch (Exception e)
-						{
+            if (Environment.UserInteractive)
+            {
+                string parameter = string.Concat(args);
+                switch (parameter)
+                {
+                    case "-i":
+                        try
+                        {
+                            Console.WriteLine("Installing service...");
+                            ManagedInstallerClass.InstallHelper(new[] {Assembly.GetExecutingAssembly().Location});
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("Error installing service: {0}", e.Message);
+                        }
+                        return;
 
-							Console.WriteLine("Error installing service: {0}", e.Message);
-						}
-						return;
+                    case "-u":
+                        try
+                        {
+                            Console.WriteLine("Uninstalling service...");
+                            ManagedInstallerClass.InstallHelper(new[] {"/u", Assembly.GetExecutingAssembly().Location});
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("Error uninstalling service: {0}", e.Message);
+                        }
+                        return;
 
-					case "-u":
-						try
-						{
-							Console.WriteLine("Uninstalling service...");
-							ManagedInstallerClass.InstallHelper(new string[] { "/u", Assembly.GetExecutingAssembly().Location });
-						}
-						catch (Exception e)
-						{
+                    case "-a":
+                        try
+                        {
+                            Console.WriteLine("Creating AWS alarms...");
+                            service.CreateAlarms();
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("Error creating alarms: {0}", e.Message);
+                        }
+                        return;
+                }
 
-							Console.WriteLine("Error uninstalling service: {0}", e.Message);
-						}
-						return;
-				}
+                service.Run();
+                return;
+            }
 
-				service.Run();
-				return;
-			}
-
-			ServiceBase[] ServicesToRun;
-			ServicesToRun = new ServiceBase[] 
-			{ 
-				service
-			};
-			ServiceBase.Run(ServicesToRun);
-		}
-	}
+            var servicesToRun = new ServiceBase[]
+            {
+                service
+            };
+            ServiceBase.Run(servicesToRun);
+        }
+    }
 }
