@@ -1,0 +1,39 @@
+{
+	"AWSTemplateFormatVersion" : "2010-09-09",
+
+	"Description" : "Creates an IAM user for use with CloudWatchMonitor",
+
+	"Parameters" : {
+	},
+
+	"Resources" : {
+		"User" : {
+			"Type": "AWS::IAM::User"
+		},
+		"UserPolicy": {
+			"Type": "AWS::IAM::Policy",
+			"Properties": {
+				"PolicyName": "root",
+				"PolicyDocument": {
+					"Version" : "2012-10-17",
+					"Statement": [ {
+						"Effect": "Allow",
+						"Action": [
+							"cloudwatch:PutMetricData"
+						],
+						"Resource": "*"
+					} ]
+				},
+				"Users": [ { "Ref": "User" } ]
+			}
+		}
+	},
+
+	"Outputs" : {
+		"CloudWatchMonitorUser" : {
+			"Value" : {
+				"Ref" : "User"
+			}
+		}
+	}
+}
